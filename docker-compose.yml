@@ -1,23 +1,43 @@
-version: "3"
-
 services:
-  avalon-game:
-    container_name: avalon-game
-    build: ./GameLogic
+  game:
+    # TODO(deploy-pipeline): publish arm64 image from Avalon-3-Spring repo CI
+    image: blu3berrywhy/avalon-spring:latest
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/avalon
     ports:
-      - 8080:8080
-    links:
+      - "8080:8080"
+    depends_on:
       - mongo
+
   email:
-    container_name: avalon-email
     build: ./EmailHandlerAvalon
+    environment:
+      CONNECTION_STRING: mongodb://mongo:27017
+      KTOR_APP: http://game:8080/
+      SECRET_KEY: ${EMAIL_SECRET_KEY:?set in Coolify env}
+      DEBUG: "0"
+      ALLOWED_HOST: ${EMAIL_ALLOWED_HOST:-localhost}
+      EMAIL_ADDRESS: ${EMAIL_ADDRESS:-avalon.f.pass@gmail.com}
+      APP_PASSWORD_EMAIL: ${APP_PASSWORD_EMAIL:?set in Coolify env}
     ports:
-      - 8000:8000
-    links:
+      - "8000:8000"
+    depends_on:
       - mongo
-      - avalon-game
-  mongo:
-    container_name: mongo
-    image: mongo:latest
+      - game
+
+  forwardauth:
+    build: ./ForwardAuth
+    environment:
+      CONNECTION_STRING: mongodb://mongo:27017
     ports:
-      - 27017:27017
+      - "5000:5000"
+
+  mongo:
+    # ponytail: pinned 4.4.18 — last release that runs on Pi 4 (ARMv8.0-A, no v8.2
+    # instructions; 4.4.19+ and 5.0+ SIGILL). Upgrade path: Pi 5 or FerretDB.
+    image: mongo:4.4.18
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
