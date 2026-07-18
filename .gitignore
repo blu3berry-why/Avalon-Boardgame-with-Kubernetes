@@ -2,3 +2,5 @@
 /helm/avalon/Chart.lock
 **/charts
 **/Chart.lock
+# local gradle cache for running submodule tests
+.gradle-home/
