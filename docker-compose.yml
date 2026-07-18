@@ -1,7 +1,9 @@
 services:
   game:
-    # TODO(deploy-pipeline): publish arm64 image from Avalon-3-Spring repo CI
-    image: blu3berrywhy/avalon-spring:latest
+    build:
+      context: ./avalon-spring
+      # repo names it DOCKERFILE; must be explicit on case-sensitive Linux
+      dockerfile: DOCKERFILE
     environment:
       SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/avalon
     ports:

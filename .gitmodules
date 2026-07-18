@@ -1,0 +1,3 @@
+[submodule "avalon-spring"]
+	path = avalon-spring
+	url = https://github.com/blu3berry-why/Avalon-3-Spring.git
