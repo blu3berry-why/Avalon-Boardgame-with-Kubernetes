@@ -1,7 +1,0 @@
-# [mongodb[+srv]://][user:pass@]host1[:port1][,host2[:port2],...][/database][?options]
-mongodb:
-  uri: "mongodb://mongodb-0.mongodb:27017,mongodb-1.mongodb:27017,mongodb-2.mongodb:27017/?replicaSet=replicaset"
-
-serviceMonitor:
-  additionalLabels:
-    release: prometheus
