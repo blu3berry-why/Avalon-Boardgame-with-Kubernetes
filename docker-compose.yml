@@ -27,7 +27,8 @@ services:
       # fine — the game runs without it; those emails just won't send.
       APP_PASSWORD_EMAIL: ${APP_PASSWORD_EMAIL:-}
     ports:
-      - "8000:8000"
+      # host 8001, not 8000 — Coolify's own dashboard owns 8000 on the host
+      - "8001:8000"
     depends_on:
       - mongo
       - game
