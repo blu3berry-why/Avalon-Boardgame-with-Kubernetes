@@ -5,7 +5,10 @@ services:
       # repo names it DOCKERFILE; must be explicit on case-sensitive Linux
       dockerfile: DOCKERFILE
     environment:
-      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/avalon
+      # Override host only — app's application.properties already sets
+      # port=27017 and database=Archimedes. Setting the full URI instead
+      # conflicts with those (Spring Boot 2.7 throws at startup).
+      SPRING_DATA_MONGODB_HOST: mongo
     ports:
       - "8080:8080"
     depends_on:
@@ -20,7 +23,9 @@ services:
       DEBUG: "0"
       ALLOWED_HOST: ${EMAIL_ALLOWED_HOST:-localhost}
       EMAIL_ADDRESS: ${EMAIL_ADDRESS:-avalon.f.pass@gmail.com}
-      APP_PASSWORD_EMAIL: ${APP_PASSWORD_EMAIL:?set in Coolify env}
+      # Optional: only needed for the password-reset email feature. Empty is
+      # fine — the game runs without it; those emails just won't send.
+      APP_PASSWORD_EMAIL: ${APP_PASSWORD_EMAIL:-}
     ports:
       - "8000:8000"
     depends_on:
