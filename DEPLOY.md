@@ -6,16 +6,21 @@ registry, no CI publish step, no secrets in git.
 
 ## What gets deployed
 
-| Service | Source | Host port | Purpose |
-|---|---|---|---|
-| `game` | `avalon-spring/` submodule (Spring Boot) | 8080 | Game REST API |
-| `email` | `EmailHandlerAvalon/` (Django) | 8001 | Password-reset emails |
-| `forwardauth` | `ForwardAuth/` (Flask) | 5000 | JWT auth check |
-| `mongo` | `mongo:4.4.18` image | — (internal) | Database |
+| Service | Source | Host port | Public via tunnel | Purpose |
+|---|---|---|---|---|
+| `game` | `avalon-spring/` submodule (Spring Boot) | 48080 | `avalon.blu3berry.com` | Game REST API |
+| `email` | `EmailHandlerAvalon/` (Django) | 48081 | optional `avalon-email.blu3berry.com` | Password-reset emails |
+| `forwardauth` | `ForwardAuth/` (Flask) | 5000 | no (internal) | JWT auth check |
+| `mongo` | `mongo:4.4.18` image | — (internal) | no | Database |
 
-Mongo is **not** published to the host — only the three app services are
-reachable. Services talk to each other over Coolify's compose network by
-name (`mongo`, `game`).
+Public exposure is via your **Cloudflare Zero Trust tunnel**, not
+Coolify/Traefik: a tunnel ingress rule maps `avalon.blu3berry.com` →
+`http://localhost:48080`. Host ports follow your `<n>8080` convention
+(gyros 18080, sunny 28080, homar 38080 → avalon 48080).
+
+Mongo and forwardauth are **not** published to the host or the tunnel.
+Services reach each other over the compose network by name (`mongo`, `game`,
+`forwardauth`).
 
 ## Prerequisites
 
@@ -51,7 +56,7 @@ Resource → **Environment Variables** → add:
 | Key | Value | Required |
 |---|---|---|
 | `EMAIL_SECRET_KEY` | a long random string (Django secret) | **yes** — deploy fails without it |
-| `EMAIL_ALLOWED_HOST` | `*` for a playground, or the email service's domain | no (defaults to `localhost`) |
+| `EMAIL_ALLOWED_HOST` | `*` for a playground, or `avalon-email.blu3berry.com` if you tunnel it | no (defaults to `localhost`) |
 | `APP_PASSWORD_EMAIL` | Gmail [app password](https://support.google.com/accounts/answer/185833) | no — only for sending reset emails |
 | `EMAIL_ADDRESS` | sender address | no (has a default) |
 
@@ -63,21 +68,24 @@ openssl rand -base64 48
 > `EMAIL_ALLOWED_HOST=*` lets Django accept any Host header — fine for a LAN
 > playground, tighten it once you have a real domain.
 
-## Step 4 — Choose how you reach the services
+## Step 4 — Expose the game via the Cloudflare tunnel
 
-**Option A — LAN IP + host ports (simplest, no domain needed).**
-The compose publishes host ports, so after deploy the services answer on the
-Pi's LAN address:
-- Game: `http://<pi-ip>:8080/`
-- Email: `http://<pi-ip>:8001/`
-- Auth: `http://<pi-ip>:5000/`
+The compose publishes host ports; the Cloudflare tunnel maps a public hostname
+to one. After deploy:
 
-Nothing extra to configure.
+**Local smoke test (no tunnel):** `http://<pi-ip>:48080/` on the LAN.
 
-**Option B — Coolify domain + HTTPS (proper).**
-In the resource, assign a domain (FQDN pointing at the Pi) to the `game`
-service. Coolify wires Traefik + Let's Encrypt automatically. Do this once the
-LAN deploy is green.
+**Public (your normal pattern):** add a tunnel ingress rule.
+1. Cloudflare Zero Trust → **Networks → Tunnels** → your tunnel → **Public
+   Hostnames** → **Add a public hostname**.
+2. Subdomain: `avalon`, Domain: `blu3berry.com`.
+3. Service type: **HTTP**, URL: `localhost:48080`.
+4. Save. `https://avalon.blu3berry.com` now front-ends the game API (Cloudflare
+   terminates TLS; forwards plain HTTP to `localhost:48080`).
+
+Optional — repeat for the email service (`avalon-email` → `localhost:48081`)
+only if the password-reset flow needs to be publicly reachable. Set
+`EMAIL_ALLOWED_HOST=avalon-email.blu3berry.com` to match.
 
 ## Step 5 — Deploy
 
@@ -89,12 +97,13 @@ Click **Deploy**. Watch the build logs.
 
 ## Step 6 — Verify
 
-1. **Game is up** — hit the root endpoint:
+1. **Game is up** — hit the root endpoint (locally, then via tunnel):
    ```bash
-   curl http://<pi-ip>:8080/
+   curl http://<pi-ip>:48080/          # LAN
+   curl https://avalon.blu3berry.com/  # through the tunnel
    # → Im running! :)
    ```
-   Or open Swagger UI: `http://<pi-ip>:8080/swagger-ui.html`
+   Or open Swagger UI: `https://avalon.blu3berry.com/swagger-ui.html`
 
 2. **Mongo compatibility confirmed** — in Coolify, check the `mongo` container
    is running and not crash-looping. A stable mongo container = the Pi 4 CPU
@@ -132,6 +141,11 @@ compose is already correct; only relevant if you hand-edit it.
 or the exact domain (Option B).
 
 ### Port bind error on deploy
-Something on the host already owns 8080 or 5000. Remap that service's host
-port in `docker-compose.yml` (e.g. `8090:8080`). Port 8000 is intentionally
-avoided — Coolify's dashboard owns it.
+Something on the host already owns 48080/48081/5000. Remap that service's host
+port in `docker-compose.yml` and update the matching tunnel ingress rule. Host
+port 8000 is intentionally avoided — Coolify's dashboard owns it.
+
+### `avalon.blu3berry.com` 502 / not reachable
+Tunnel rule points at a port nothing is listening on. Confirm the game
+container is up and answering on the LAN (`curl http://<pi-ip>:48080/`) first,
+then that the ingress rule targets `localhost:48080`.
