@@ -10,7 +10,9 @@ services:
       # conflicts with those (Spring Boot 2.7 throws at startup).
       SPRING_DATA_MONGODB_HOST: mongo
     ports:
-      - "8080:8080"
+      # host 48080 → Cloudflare tunnel maps avalon.blu3berry.com here.
+      # Follows the existing <n>8080 convention (gyros 18080, sunny 28080...).
+      - "48080:8080"
     depends_on:
       - mongo
 
@@ -27,8 +29,9 @@ services:
       # fine — the game runs without it; those emails just won't send.
       APP_PASSWORD_EMAIL: ${APP_PASSWORD_EMAIL:-}
     ports:
-      # host 8001, not 8000 — Coolify's own dashboard owns 8000 on the host
-      - "8001:8000"
+      # host 48081 → optional tunnel host (avalon-email.blu3berry.com) for the
+      # password-reset flow. Not 8000 — Coolify's dashboard owns host 8000.
+      - "48081:8000"
     depends_on:
       - mongo
       - game
