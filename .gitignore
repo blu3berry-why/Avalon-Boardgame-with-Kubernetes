@@ -4,3 +4,7 @@
 **/Chart.lock
 # local gradle cache for running submodule tests
 .gradle-home/
+
+# python test artifacts
+__pycache__/
+.pytest_cache/

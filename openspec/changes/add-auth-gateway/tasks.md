@@ -2,15 +2,15 @@
 
 ## 1. ForwardAuth: configured signing key and token validation
 
-- [ ] 1.1 Add `ForwardAuth/requirements-dev.txt` (`pytest`, `mongomock`, plus `-r requirements.txt`) and a `ForwardAuth/tests/conftest.py`. It sets `JWT_SECRET`, swaps the module's Mongo db for a `mongomock` one, and yields a Flask test client. Verify `python -m pytest ForwardAuth/tests` collects and runs (0 tests is fine at this step).
-- [ ] 1.2 Read the signing key from `JWT_SECRET` at import. Exit with a message naming `JWT_SECRET` when it is missing or empty. Use it in both `jwt.encode` and `jwt.decode`. Verify with a test that importing the app without `JWT_SECRET` raises/exits, and a test that a token signed with `"secret"` is rejected by `/auth` with 401.
-- [ ] 1.3 Rewrite `/auth`:
+- [x] 1.1 Add `ForwardAuth/requirements-dev.txt` (`pytest`, `mongomock`, plus `-r requirements.txt`) and a `ForwardAuth/tests/conftest.py`. It sets `JWT_SECRET`, swaps the module's Mongo db for a `mongomock` one, and yields a Flask test client. Verify `python -m pytest ForwardAuth/tests` collects and runs (0 tests is fine at this step).
+- [x] 1.2 Read the signing key from `JWT_SECRET` at import. Exit with a message naming `JWT_SECRET` when it is missing or empty. Use it in both `jwt.encode` and `jwt.decode`. Verify with a test that importing the app without `JWT_SECRET` raises/exits, and a test that a token signed with `"secret"` is rejected by `/auth` with 401.
+- [x] 1.3 Rewrite `/auth`:
   - 200 with `Avalon-Header-Logged-In-User-Username: <username>` for a valid token.
   - 401 with a JSON `message` body for a missing header, a non-`Bearer ` scheme, a malformed token, a bad signature, a missing `expire` claim or a past `expire`.
   - Catch `jwt.InvalidTokenError`; nothing may return a 5xx.
   - Verify with one pytest per `user-auth` "Token validation" scenario.
-- [ ] 1.4 Return JSON `{"message": ...}` bodies with `Content-Type: application/json` from `/login` (404 unknown user, 403 wrong password), keeping the codes. Verify with pytest for both error scenarios plus the success scenario: `/login` returns `username` and a `token` that `/auth` accepts.
-- [ ] 1.5 Add pytest for `/register`: a new user gets 200, then `/login` succeeds; a duplicate gets 409 with a JSON `message`. Verify the whole `ForwardAuth/tests` suite passes.
+- [x] 1.4 Return JSON `{"message": ...}` bodies with `Content-Type: application/json` from `/login` (404 unknown user, 403 wrong password), keeping the codes. Verify with pytest for both error scenarios plus the success scenario: `/login` returns `username` and a `token` that `/auth` accepts.
+- [x] 1.5 Add pytest for `/register`: a new user gets 200, then `/login` succeeds; a duplicate gets 409 with a JSON `message`. Verify the whole `ForwardAuth/tests` suite passes.
 
 ## 2. Traefik gateway in compose
 
