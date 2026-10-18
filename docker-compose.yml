@@ -9,12 +9,24 @@ services:
       # port=27017 and database=Archimedes. Setting the full URI instead
       # conflicts with those (Spring Boot 2.7 throws at startup).
       SPRING_DATA_MONGODB_HOST: mongo
+    # No host port: only reachable through `gateway`, which owns 48080.
+    depends_on:
+      - mongo
+
+  gateway:
+    # Public entry point (openspec/specs/api-gateway). Routes /login + /register to
+    # forwardauth, authenticates everything else via forwardauth /auth, and sets the
+    # identity header avalon-spring trusts. Config: traefik/compose/.
+    image: traefik:v3.7.14
+    volumes:
+      - ./traefik/compose:/etc/traefik:ro
     ports:
       # host 48080 → Cloudflare tunnel maps avalon.blu3berry.com here.
       # Follows the existing <n>8080 convention (gyros 18080, sunny 28080...).
-      - "48080:8080"
+      - "${GATEWAY_PORT:-48080}:80"
     depends_on:
-      - mongo
+      - game
+      - forwardauth
 
   email:
     build: ./EmailHandlerAvalon
@@ -31,7 +43,7 @@ services:
     ports:
       # host 48081 → optional tunnel host (avalon-email.blu3berry.com) for the
       # password-reset flow. Not 8000 — Coolify's dashboard owns host 8000.
-      - "48081:8000"
+      - "${EMAIL_PORT:-48081}:8000"
     depends_on:
       - mongo
       - game
@@ -40,8 +52,8 @@ services:
     build: ./ForwardAuth
     environment:
       CONNECTION_STRING: mongodb://mongo:27017
-    ports:
-      - "5000:5000"
+      JWT_SECRET: ${JWT_SECRET:?set in Coolify env}
+    # No host port: only reachable through `gateway`.
 
   mongo:
     # ponytail: pinned 4.4.18 — last release that runs on Pi 4 (ARMv8.0-A, no v8.2

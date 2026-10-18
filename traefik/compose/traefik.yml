@@ -1,0 +1,18 @@
+# Static config for the compose gateway (docker-compose.yml `gateway`).
+# File provider only — no Docker socket, no API/dashboard. Routing is in dynamic.yml.
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+
+log:
+  level: INFO
+
+accessLog: {}

@@ -1,0 +1,52 @@
+# Routing for the compose gateway. Mirrors the k8s forwardAuth middleware in
+# helm/forwardauth/templates/middleware.yaml, plus the identity header contract
+# avalon-spring relies on (openspec/specs/api-gateway).
+http:
+  routers:
+    # Login and registration are the only routes that work without a token.
+    auth-public:
+      entryPoints: [web]
+      rule: "Method(`POST`) && (Path(`/login`) || Path(`/register`))"
+      priority: 100
+      middlewares: [strip-identity]
+      service: forwardauth
+
+    health:
+      entryPoints: [web]
+      rule: "Method(`GET`) && Path(`/`)"
+      priority: 90
+      middlewares: [strip-identity]
+      service: game
+
+    # Everything else is authenticated before it reaches the game service.
+    protected:
+      entryPoints: [web]
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      middlewares: [strip-identity, require-auth]
+      service: game
+
+  middlewares:
+    # An empty value removes the header, so a client can never supply its own identity.
+    strip-identity:
+      headers:
+        customRequestHeaders:
+          Avalon-Header-Logged-In-User-Username: ""
+
+    # On 2xx, ForwardAuth's identity header replaces the request's; on anything else
+    # the auth response (401 + JSON body) goes straight back to the client.
+    require-auth:
+      forwardAuth:
+        address: http://forwardauth:5000/auth
+        authResponseHeaders:
+          - Avalon-Header-Logged-In-User-Username
+
+  services:
+    game:
+      loadBalancer:
+        servers:
+          - url: http://game:8080
+    forwardauth:
+      loadBalancer:
+        servers:
+          - url: http://forwardauth:5000

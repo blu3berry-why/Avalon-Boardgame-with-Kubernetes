@@ -8,9 +8,10 @@ registry, no CI publish step, no secrets in git.
 
 | Service | Source | Host port | Public via tunnel | Purpose |
 |---|---|---|---|---|
-| `game` | `avalon-spring/` submodule (Spring Boot) | 48080 | `avalon.blu3berry.com` | Game REST API |
+| `gateway` | `traefik:v3.7.14` image, config in `traefik/compose/` | 48080 | `avalon.blu3berry.com` | Public entry point: routes login/register, authenticates everything else |
+| `game` | `avalon-spring/` submodule (Spring Boot) | — (internal) | via `gateway` | Game REST API |
 | `email` | `EmailHandlerAvalon/` (Django) | 48081 | optional `avalon-email.blu3berry.com` | Password-reset emails |
-| `forwardauth` | `ForwardAuth/` (Flask) | 5000 | no (internal) | JWT auth check |
+| `forwardauth` | `ForwardAuth/` (Flask) | — (internal) | `/login`, `/register` via `gateway` | Issues and checks JWTs |
 | `mongo` | `mongo:4.4.18` image | — (internal) | no | Database |
 
 Public exposure is via your **Cloudflare Zero Trust tunnel**, not
@@ -18,9 +19,13 @@ Coolify/Traefik: a tunnel ingress rule maps `avalon.blu3berry.com` →
 `http://localhost:48080`. Host ports follow your `<n>8080` convention
 (gyros 18080, sunny 28080, homar 38080 → avalon 48080).
 
-Mongo and forwardauth are **not** published to the host or the tunnel.
-Services reach each other over the compose network by name (`mongo`, `game`,
-`forwardauth`).
+Only `gateway` (and optionally `email`) is published to the host. `game`,
+`forwardauth` and `mongo` are reachable only over the compose network by name.
+The gateway sends `POST /login` and `POST /register` to forwardauth, keeps
+`GET /` public as a health check, and checks every other request against
+forwardauth `/auth`. On success it sets `Avalon-Header-Logged-In-User-Username`,
+the header avalon-spring trusts as the caller, and it always drops any value a
+client sent for it.
 
 ## Prerequisites
 
@@ -55,12 +60,13 @@ Resource → **Environment Variables** → add:
 
 | Key | Value | Required |
 |---|---|---|
+| `JWT_SECRET` | a long random string (login token signing key) | **yes** — deploy fails without it. Changing it logs every user out |
 | `EMAIL_SECRET_KEY` | a long random string (Django secret) | **yes** — deploy fails without it |
 | `EMAIL_ALLOWED_HOST` | `*` for a playground, or `avalon-email.blu3berry.com` if you tunnel it | no (defaults to `localhost`) |
 | `APP_PASSWORD_EMAIL` | Gmail [app password](https://support.google.com/accounts/answer/185833) | no — only for sending reset emails |
 | `EMAIL_ADDRESS` | sender address | no (has a default) |
 
-Generate a secret key:
+Generate each secret key separately:
 ```bash
 openssl rand -base64 48
 ```
@@ -79,7 +85,8 @@ to one. After deploy:
 1. Cloudflare Zero Trust → **Networks → Tunnels** → your tunnel → **Public
    Hostnames** → **Add a public hostname**.
 2. Subdomain: `avalon`, Domain: `blu3berry.com`.
-3. Service type: **HTTP**, URL: `localhost:48080`.
+3. Service type: **HTTP**, URL: `localhost:48080` (the `gateway`, not the game
+   service directly).
 4. Save. `https://avalon.blu3berry.com` now front-ends the game API (Cloudflare
    terminates TLS; forwards plain HTTP to `localhost:48080`).
 
@@ -103,13 +110,20 @@ Click **Deploy**. Watch the build logs.
    curl https://avalon.blu3berry.com/  # through the tunnel
    # → Im running! :)
    ```
-   Or open Swagger UI: `https://avalon.blu3berry.com/swagger-ui.html`
+   Swagger UI is behind the gateway's auth now, so it needs a bearer token.
 
-2. **Mongo compatibility confirmed** — in Coolify, check the `mongo` container
+2. **Auth gateway works**: run the smoke test, which registers a throwaway
+   user and walks every gateway rule:
+   ```bash
+   tests/gateway_smoke.sh https://avalon.blu3berry.com
+   # → ALL PASS
+   ```
+
+3. **Mongo compatibility confirmed** — in Coolify, check the `mongo` container
    is running and not crash-looping. A stable mongo container = the Pi 4 CPU
    runs 4.4.18 correctly (no `SIGILL`).
 
-3. **RAM headroom** (the strategy metric) — Coolify server dashboard shows
+4. **RAM headroom** (the strategy metric) — Coolify server dashboard shows
    memory. Below ~2GB free is the "stop adding, start trimming" line.
 
 ## Step 7 — Shipping updates later
@@ -141,11 +155,21 @@ compose is already correct; only relevant if you hand-edit it.
 or the exact domain (Option B).
 
 ### Port bind error on deploy
-Something on the host already owns 48080/48081/5000. Remap that service's host
-port in `docker-compose.yml` and update the matching tunnel ingress rule. Host
+Something on the host already owns 48080/48081. Set `GATEWAY_PORT` /
+`EMAIL_PORT` in the resource's environment to another host port and update the
+matching tunnel ingress rule. The same variables let a second Coolify resource
+deploy a branch next to production for testing, e.g. `GATEWAY_PORT=48090`,
+`EMAIL_PORT=48091`. It gets its own mongo volume. Host
 port 8000 is intentionally avoided — Coolify's dashboard owns it.
 
 ### `avalon.blu3berry.com` 502 / not reachable
-Tunnel rule points at a port nothing is listening on. Confirm the game
-container is up and answering on the LAN (`curl http://<pi-ip>:48080/`) first,
-then that the ingress rule targets `localhost:48080`.
+Tunnel rule points at a port nothing is listening on. Confirm the `gateway`
+and `game` containers are up and the gateway answers on the LAN
+(`curl http://<pi-ip>:48080/`) first, then that the ingress rule targets
+`localhost:48080`. A 502 from the gateway itself means `game` or `forwardauth`
+is down. Check those containers' logs.
+
+### 401 on every request after a deploy
+Tokens are signed with `JWT_SECRET`. Tokens issued before the key was set or
+changed are rejected, so log in again. If a fresh login also gets 401, check
+that the `forwardauth` container is running and has `JWT_SECRET` set.

@@ -26,8 +26,8 @@
   - register and login through the gateway
   - `POST /lobby/create` without a token → 401, and with a token → 2xx
   - an expired or garbage token → 401
-  - forged identity overwritten: create a lobby as `alice` while sending `Avalon-Header-Logged-In-User-Username: bob`, then check that `alice` is the lobby's player via `GET /lobby/{code}/playernames`
-  - forged identity stripped on `GET /`, verified via the `/tryheader` route returning 401 without a token rather than echoing `bob`
+  - forged identity without a token: `GET /tryheader` with `Avalon-Header-Logged-In-User-Username: bob` → 401, not an echo of `bob`
+  - forged identity overwritten: `GET /tryheader` with a valid token plus `…: bob` echoes the token's user (`/tryheader` returns the identity the game service received, which makes it a more direct check than the lobby player list). Stripping on `GET /` is not observable from outside, because the game service ignores the header there; `dynamic.yml` covers it by applying `strip-identity` to every router.
 
   Run it against a local `JWT_SECRET=x docker compose up` (or the Pi LAN) and verify every check prints PASS.
 - [ ] 2.5 Update `DEPLOY.md`:
